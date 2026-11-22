@@ -106,9 +106,7 @@ static const u64 PMAX = 1u << 14;           // small primes used for the fast pa
 static const u64 SEG_EVENS = 1u << 22;      // evens per work chunk (range of 8M numbers)
 static const u64 BATCH_CHUNKS = 8;          // contiguous chunks per task (amortizes 64-bit div)
 static const u64 DIRECT_LIMIT = 1u << 20;   // below this, verify with a plain sieve
-static const u32 PRESIEVE_MAX = 17;         // primes 3..17 come from a 32 KB periodic pattern
-static const u32 PRESIEVE2_MAX = 29;        // primes 19..29 from a second 1.6 KB pattern
-static const u32 PRESIEVE3_MAX = 43;        // primes 31..43 from a third 253 KB pattern
+static const u32 PRESIEVE_MAX = 47;         // primes 3..47 from 5 byte-aligned L1 patterns (26 KB total)
 static const u64 COV_BLOCK = 2048;          // coverage words per sub-block (16 KB, stays in L1)
 static const u32 SIEVE_BLOCK = 1u << 18;    // sieve sub-block in bits (32 KB, L1-sized)
 static const u32 BLOCKS_PER_CHUNK = (u32)((SEG_EVENS + PMAX + SIEVE_BLOCK - 1) / SIEVE_BLOCK); // 17
@@ -191,12 +189,11 @@ struct Shared {
     std::atomic<u64> chunksDone{0};
     gb::Mutex recordMutex;
     u64 recordP = 0, recordN = 0;    // largest "minimal p" seen
-    std::vector<u64> pattern;        // pre-sieved odd-only bitmap, period patternLen bits
-    u32 patternLen = 1;
-    std::vector<u64> pattern2;       // second pattern for primes in (PRESIEVE_MAX, PRESIEVE2_MAX]
-    u32 pattern2Len = 1;
-    std::vector<u64> pattern3;       // third pattern for primes in (PRESIEVE2_MAX, PRESIEVE3_MAX]
-    u32 pattern3Len = 1;
+    // 5 byte-aligned periodic patterns covering all odd primes 3..47 (~26 KB total, L1-resident):
+    //   [0]: 3..13 (15,015 B), [1]: 17..23 (7,429 B), [2]: 29..31 (899 B),
+    //   [3]: 37..41 (1,517 B), [4]: 43..47 (2,021 B)
+    std::vector<uint8_t> pat[5];
+    u32 patLen[5] = {1, 1, 1, 1, 1};
     size_t firstSieveIdx = 0;        // index in basePrimes of first prime > PRESIEVE_MAX
     size_t densePrimes = 64;         // primes applied in the vectorized pass A
     std::string ckptFile;            // optional checkpoint file path
@@ -260,28 +257,29 @@ static u64 countBits(const u64* w, u64 a, u64 b) {
     return c;
 }
 
-// Odd-only pattern with multiples of the odd primes in (lo, hi] cleared.
-// Bit j <-> odd number 2j+1; period = product of those primes.
-static void makePattern(const std::vector<u32>& primes, u32 lo, u32 hi,
-                        std::vector<u64>& pat, u32& L) {
+// Byte-aligned odd-only pattern with multiples of odd primes in (lo, hi] cleared.
+// Bit j <-> odd number 2j+1. Period in bytes is L = product of those primes (8*L bits).
+static void makeBytePattern(const std::vector<u32>& primes, u32 lo, u32 hi,
+                            std::vector<uint8_t>& pat, u32& L) {
     L = 1;
     for (u32 p : primes) if (p > lo && p <= hi) L *= p;
-    const u32 totalBits = L + 128;   // padding so extract64(pos < L) never wraps
-    pat.assign(totalBits / 64 + 2, ~0ULL);
+    const u32 totalBytes = L + 64;   // padding so 32-byte AVX2 loads at offset < L never wrap
+    const u32 totalBits = totalBytes * 8;
+    pat.assign(totalBytes, 0xFF);
     for (u32 p : primes) {
         if (p <= lo || p > hi) continue;
         // odd multiples of p: 2j+1 = p*(2t+1)  ->  j = (p-1)/2 + p*t
         for (u32 j = (p - 1) / 2; j < totalBits; j += p)
-            pat[j >> 6] &= ~(1ULL << (j & 63));
+            pat[j >> 3] &= (uint8_t)~(1u << (j & 7));
     }
 }
 
 static void buildPattern(Shared& sh) {
-    makePattern(sh.basePrimes, 2, PRESIEVE_MAX, sh.pattern, sh.patternLen);
-    makePattern(sh.basePrimes, PRESIEVE_MAX, PRESIEVE2_MAX, sh.pattern2, sh.pattern2Len);
-    makePattern(sh.basePrimes, PRESIEVE2_MAX, PRESIEVE3_MAX, sh.pattern3, sh.pattern3Len);
+    static const u32 bounds[6] = {2, 13, 23, 31, 41, PRESIEVE_MAX};
+    for (int i = 0; i < 5; ++i)
+        makeBytePattern(sh.basePrimes, bounds[i], bounds[i + 1], sh.pat[i], sh.patLen[i]);
     while (sh.firstSieveIdx < sh.basePrimes.size() &&
-           sh.basePrimes[sh.firstSieveIdx] <= PRESIEVE3_MAX) ++sh.firstSieveIdx;
+           sh.basePrimes[sh.firstSieveIdx] <= PRESIEVE_MAX) ++sh.firstSieveIdx;
 }
 
 static inline int ctz64(u64 x) {
@@ -405,7 +403,7 @@ static void worker(void* arg) {
     Shared* sh = static_cast<Shared*>(arg);
     // Odd-only bitmap over window [W, hi): bit i <-> odd number W + 2i + 1.
     const u64 windowBits = (SEG_EVENS + PMAX) + 128;
-    std::vector<u64> bits(windowBits / 64 + 4);
+    std::vector<u64> bits(windowBits / 64 + 8);
     u64 localRecordP = 0, localRecordN = 0;
     std::vector<u64> cov(COV_BLOCK);
 
@@ -474,39 +472,84 @@ static void worker(void* arg) {
             const u64 W = lo - PMAX;                                     // even
             const u64 top = hi;                                          // sieve odds < top
             const u64 nbits = (top - W) / 2;
-            const u64 nwords = (nbits + 63) / 64 + 2;
 
             // --- 1. Sieve the window [W, top) (odd numbers only) ---------------
             // Cache-blocked: the window is processed in SIEVE_BLOCK-bit (32 KB) pieces
             // so every crossing pass hits L1; each prime's next index is carried over.
             auto tS = std::chrono::steady_clock::now();
             u64* Bw = bits.data();
+            uint8_t* Bb = reinterpret_cast<uint8_t*>(Bw);
             const u32 nb32 = (u32)nbits;
+            const u32 totalBytes = (u32)(((nbits + 255) / 256) * 32);
             const u32 stride = (u32)SEG_EVENS;
-            const u64* P = sh->pattern.data();
-            const u32 L = sh->patternLen;
-            const u64* P2 = sh->pattern2.data();
-            const u32 L2 = sh->pattern2Len;
-            const u64* P3 = sh->pattern3.data();
-            const u32 L3 = sh->pattern3Len;
-            u32 pos = (u32)((W / 2) % L);
-            u32 pos2 = (u32)((W / 2) % L2);
-            u32 pos3 = (u32)((W / 2) % L3);
-            for (u32 blk = 0; blk < nwords * 64; blk += SIEVE_BLOCK) {
-                // 1a. Pre-sieve: copy the periodic patterns for primes 3..PRESIEVE3_MAX.
-                //     Window bit i <-> absolute odd index j = W/2 + i.
-                const u32 w0 = blk / 64;
-                const u32 w1 = (u32)std::min<u64>(nwords, (blk + SIEVE_BLOCK) / 64);
-                for (u32 w = w0; w < w1; ++w) {
-                    Bw[w] = extract64(P, pos) & extract64(P2, pos2) & extract64(P3, pos3);
-                    pos += 64; if (pos >= L) pos -= L;
-                    pos2 += 64; if (pos2 >= L2) pos2 -= L2;
-                    pos3 += 64; if (pos3 >= L3) pos3 -= L3;
+            const uint8_t* P0 = sh->pat[0].data(); const u32 L0 = sh->patLen[0];
+            const uint8_t* P1 = sh->pat[1].data(); const u32 L1 = sh->patLen[1];
+            const uint8_t* P2 = sh->pat[2].data(); const u32 L2 = sh->patLen[2];
+            const uint8_t* P3 = sh->pat[3].data(); const u32 L3 = sh->patLen[3];
+            const uint8_t* P4 = sh->pat[4].data(); const u32 L4 = sh->patLen[4];
+            // W is always a multiple of 2^14, so W/2 is always byte-aligned (multiple of 8).
+            const u64 startByte = W >> 4;
+            u32 o0 = (u32)(startByte % L0), o1 = (u32)(startByte % L1),
+                o2 = (u32)(startByte % L2), o3 = (u32)(startByte % L3),
+                o4 = (u32)(startByte % L4);
+            for (u32 blk = 0; blk < totalBytes * 8; blk += SIEVE_BLOCK) {
+                // 1a. Pre-sieve: AVX2/SSE2/u64 AND of 5 byte-aligned L1 patterns (primes 3..47).
+                const u32 b0 = blk >> 3;
+                const u32 b1 = std::min<u32>(totalBytes, (blk + SIEVE_BLOCK) >> 3);
+#if defined(__AVX2__)
+                for (u32 b = b0; b < b1; b += 32) {
+                    __m256i v01 = _mm256_and_si256(
+                        _mm256_loadu_si256((const __m256i*)(P0 + o0)),
+                        _mm256_loadu_si256((const __m256i*)(P1 + o1)));
+                    __m256i v23 = _mm256_and_si256(
+                        _mm256_loadu_si256((const __m256i*)(P2 + o2)),
+                        _mm256_loadu_si256((const __m256i*)(P3 + o3)));
+                    __m256i v = _mm256_and_si256(
+                        _mm256_and_si256(v01, v23),
+                        _mm256_loadu_si256((const __m256i*)(P4 + o4)));
+                    _mm256_storeu_si256((__m256i*)(Bb + b), v);
+                    o0 += 32; if (o0 >= L0) o0 -= L0;
+                    o1 += 32; if (o1 >= L1) o1 -= L1;
+                    o2 += 32; if (o2 >= L2) o2 -= L2;
+                    o3 += 32; if (o3 >= L3) o3 -= L3;
+                    o4 += 32; if (o4 >= L4) o4 -= L4;
                 }
+#elif defined(__SSE2__)
+                for (u32 b = b0; b < b1; b += 16) {
+                    __m128i v01 = _mm_and_si128(
+                        _mm_loadu_si128((const __m128i*)(P0 + o0)),
+                        _mm_loadu_si128((const __m128i*)(P1 + o1)));
+                    __m128i v23 = _mm_and_si128(
+                        _mm_loadu_si128((const __m128i*)(P2 + o2)),
+                        _mm_loadu_si128((const __m128i*)(P3 + o3)));
+                    __m128i v = _mm_and_si128(
+                        _mm_and_si128(v01, v23),
+                        _mm_loadu_si128((const __m128i*)(P4 + o4)));
+                    _mm_storeu_si128((__m128i*)(Bb + b), v);
+                    o0 += 16; if (o0 >= L0) o0 -= L0;
+                    o1 += 16; if (o1 >= L1) o1 -= L1;
+                    o2 += 16; if (o2 >= L2) o2 -= L2;
+                    o3 += 16; if (o3 >= L3) o3 -= L3;
+                    o4 += 16; if (o4 >= L4) o4 -= L4;
+                }
+#else
+                for (u32 b = b0; b < b1; b += 8) {
+                    u64 a0, a1, a2, a3, a4;
+                    std::memcpy(&a0, P0 + o0, 8); std::memcpy(&a1, P1 + o1, 8);
+                    std::memcpy(&a2, P2 + o2, 8); std::memcpy(&a3, P3 + o3, 8);
+                    std::memcpy(&a4, P4 + o4, 8);
+                    u64 v = a0 & a1 & a2 & a3 & a4;
+                    std::memcpy(Bb + b, &v, 8);
+                    o0 += 8; if (o0 >= L0) o0 -= L0;
+                    o1 += 8; if (o1 >= L1) o1 -= L1;
+                    o2 += 8; if (o2 >= L2) o2 -= L2;
+                    o3 += 8; if (o3 >= L3) o3 -= L3;
+                    o4 += 8; if (o4 >= L4) o4 -= L4;
+                }
+#endif
                 // 1b. Cross off medium base primes inside this block.
                 //     Save nextIdx for the overlap snap if this block crosses `stride`.
                 static const uint8_t CLR[8] = {0xFE, 0xFD, 0xFB, 0xF7, 0xEF, 0xDF, 0xBF, 0x7F};
-                uint8_t* Bb = reinterpret_cast<uint8_t*>(Bw);
                 const u32 end = std::min<u32>(nb32, blk + SIEVE_BLOCK);
                 if (end >= stride && blk < stride) {
                     // Snapshot the first index >= stride for the next chunk's overlap window [0, PMAX/2)
