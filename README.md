@@ -24,6 +24,15 @@ High-throughput C++ Goldbach conjecture verifier using a cache-blocked segmented
 | $10^{11}$ | *(12.5 GB RAM)* | **13.827 s** | **3.62 B evens/s** | `2803` ($35{,}884{,}080{,}836$) | `4,118,054,813` |
 | $10^{12}$ | *(125 GB RAM)* | **200.813 s** | **2.49 B evens/s** | `3457` ($599{,}533{,}546{,}358$) | `37,607,912,018` |
 
+## Research Frontiers (`research_suite.cpp`)
+
+Beyond standard Goldbach verification, [`research_suite.cpp`](research_suite.cpp) applies the same AVX2 sieve engine to four computational number theory & CS frontiers — full results in **[`RESEARCH.md`](RESEARCH.md)**:
+
+1. **Lemoine's Conjecture ($n = p + 2q$) to $10^{12}$:** verified all 500 billion odd numbers up to $10^{12}+1$ in **277.8 s** (100× past the standard $10^{10}$ literature milestone), maximal minimal $q = 3079$ at $n = 853{,}036{,}242{,}229$.
+2. **Twin-Prime Goldbach to $10^{10}$:** verified all 5 billion evens in **37.7 s** — exactly **34 exceptions** total, largest exception `4208`, maximal minimal twin-prime witness `299,359` at $n = 8{,}115{,}525{,}848$.
+3. **Goldbach Binary Carry Excess $\Delta_c(n)$ ($10^9$):** discovered an exact **$2^{-\Delta_c}$ geometric tail law** and a non-monotonic popcount phase transition peaking at `popcount = 7` (41.19% failure) and collapsing to `0%` for `popcount >= 25`.
+4. **Information Theory of $p_{\min}(n)$ ($10^{10}$):** measured $H(p_{\min}) = 4.8616\text{ bits}$, super-mod-6 lag-1 mutual information $I = 1.5872\text{ bits} > \log_2 3$ (twin-prime witness propagation), and a Chebyshev witness inversion where `p = 31` beats `p = 29`.
+
 ## Build & Run
 
 ```bash

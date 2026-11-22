@@ -11,9 +11,12 @@ endif
 
 .PHONY: all test bench clean
 
-all: goldbach$(EXT) baseline$(EXT)
+all: goldbach$(EXT) baseline$(EXT) research_suite$(EXT)
 
 goldbach$(EXT): goldbach.cpp
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
+
+research_suite$(EXT): research_suite.cpp
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
 
 baseline$(EXT): baseline.cpp
