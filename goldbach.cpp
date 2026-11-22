@@ -505,6 +505,7 @@ static void worker(void* arg) {
                 }
                 // 1b. Cross off medium base primes inside this block.
                 //     Save nextIdx for the overlap snap if this block crosses `stride`.
+                static const uint8_t CLR[8] = {0xFE, 0xFD, 0xFB, 0xF7, 0xEF, 0xDF, 0xBF, 0x7F};
                 uint8_t* Bb = reinterpret_cast<uint8_t*>(Bw);
                 const u32 end = std::min<u32>(nb32, blk + SIEVE_BLOCK);
                 if (end >= stride && blk < stride) {
@@ -512,26 +513,41 @@ static void worker(void* arg) {
                     for (size_t k = 0; k < nMedActive; ++k) {
                         u32 i = nextIdx[k];
                         const u32 step = primeStep[k];
-                        for (; i < stride; i += step) Bb[i >> 3] &= (uint8_t)~(1u << (i & 7));
+                        for (; i < stride; i += step) Bb[i >> 3] &= CLR[i & 7];
                         overlapIdx[k] = i - stride;
-                        for (; i < end; i += step) Bb[i >> 3] &= (uint8_t)~(1u << (i & 7));
+                        for (; i < end; i += step) Bb[i >> 3] &= CLR[i & 7];
                         nextIdx[k] = i;
                     }
                 } else {
                     for (size_t k = 0; k < nMedActive; ++k) {
                         u32 i = nextIdx[k];
                         const u32 step = primeStep[k];
-                        const u32 step4 = step * 4;
-                        for (; i + step4 <= end; i += step4) {
-                            Bb[i >> 3]               &= (uint8_t)~(1u << (i & 7));
-                            u32 i1 = i + step;
-                            Bb[i1 >> 3]              &= (uint8_t)~(1u << (i1 & 7));
-                            u32 i2 = i1 + step;
-                            Bb[i2 >> 3]              &= (uint8_t)~(1u << (i2 & 7));
-                            u32 i3 = i2 + step;
-                            Bb[i3 >> 3]              &= (uint8_t)~(1u << (i3 & 7));
+                        const u32 step8 = step << 3;
+                        if (i + step8 <= end) {
+                            // 8x constant-mask wheel: (i + 8*step) has the same bit-in-byte (r)
+                            // and advances the byte index by exactly `step` — zero shifts in loop.
+                            u32 b = i >> 3;
+                            const u32 r = i & 7;
+                            const u32 r1 = r + step, r2 = r1 + step, r3 = r2 + step, r4 = r3 + step,
+                                      r5 = r4 + step, r6 = r5 + step, r7 = r6 + step;
+                            const u32 d1 = r1 >> 3, d2 = r2 >> 3, d3 = r3 >> 3, d4 = r4 >> 3,
+                                      d5 = r5 >> 3, d6 = r6 >> 3, d7 = r7 >> 3;
+                            const uint8_t m0 = CLR[r],      m1 = CLR[r1 & 7], m2 = CLR[r2 & 7], m3 = CLR[r3 & 7],
+                                          m4 = CLR[r4 & 7], m5 = CLR[r5 & 7], m6 = CLR[r6 & 7], m7 = CLR[r7 & 7];
+                            const u32 bEnd = (end - r - step8) >> 3;
+                            for (; b <= bEnd; b += step) {
+                                Bb[b]      &= m0;
+                                Bb[b + d1] &= m1;
+                                Bb[b + d2] &= m2;
+                                Bb[b + d3] &= m3;
+                                Bb[b + d4] &= m4;
+                                Bb[b + d5] &= m5;
+                                Bb[b + d6] &= m6;
+                                Bb[b + d7] &= m7;
+                            }
+                            i = (b << 3) | r;
                         }
-                        for (; i < end; i += step) Bb[i >> 3] &= (uint8_t)~(1u << (i & 7));
+                        for (; i < end; i += step) Bb[i >> 3] &= CLR[i & 7];
                         nextIdx[k] = i;
                     }
                 }
@@ -541,10 +557,11 @@ static void worker(void* arg) {
             }
             // 1c. Apply bucketed large primes (p >= SIEVE_BLOCK) that actually hit this chunk.
             {
+                static const uint8_t CLR[8] = {0xFE, 0xFD, 0xFB, 0xF7, 0xEF, 0xDF, 0xBF, 0x7F};
                 uint8_t* Bb = reinterpret_cast<uint8_t*>(Bw);
                 for (const LargeHit& h : buckets[c - cStart]) {
                     if (h.localBit < nb32)
-                        Bb[h.localBit >> 3] &= (uint8_t)~(1u << (h.localBit & 7));
+                        Bb[h.localBit >> 3] &= CLR[h.localBit & 7];
                 }
             }
             auto tC = std::chrono::steady_clock::now();

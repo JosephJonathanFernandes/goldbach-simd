@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-verify:
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          g++ -O3 -march=native -std=c++17 -Wall -Wno-format -pthread goldbach.cpp -o goldbach
+          g++ -O3 -march=native -std=c++17 baseline.cpp -o baseline
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          g++ -O3 -march=native -std=c++17 -Wall -Wno-format -pthread goldbach.cpp -o goldbach.exe
+          g++ -O3 -march=native -std=c++17 baseline.cpp -o baseline.exe
+
+      - name: Verify edge cases and pi(N) self-check (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          ./goldbach 4 2
+          ./goldbach 5 2
+          ./goldbach 1048574 2
+          ./goldbach 1048576 2
+          ./goldbach 1048578 2
+          ./goldbach 1e8
+          ./goldbach 1e9 4 test.ckpt
+          ./baseline 1e6
+
+      - name: Verify edge cases and pi(N) self-check (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./goldbach.exe 4 2
+          ./goldbach.exe 5 2
+          ./goldbach.exe 1048574 2
+          ./goldbach.exe 1048576 2
+          ./goldbach.exe 1048578 2
+          ./goldbach.exe 1e8
+          ./goldbach.exe 1e9 4 test.ckpt
+          ./baseline.exe 1e6
