@@ -26,9 +26,9 @@ High-throughput C++ Goldbach conjecture verifier using a cache-blocked segmented
 
 ![Benchmark Scaling](figures/benchmark_scaling.png)
 
-## Research Frontiers (`research_suite.cpp`)
+## Research Frontiers (`research_suite.cpp`, `carry_exact.cpp`)
 
-Beyond standard Goldbach verification, [`research_suite.cpp`](research_suite.cpp) applies the same AVX2 sieve engine to four computational number theory & CS frontiers — full results in **[`RESEARCH.md`](RESEARCH.md)**:
+Beyond standard Goldbach verification, [`research_suite.cpp`](research_suite.cpp) and [`carry_exact.cpp`](carry_exact.cpp) apply the same AVX2 sieve engine to four computational number theory & CS frontiers — full results in **[`RESEARCH.md`](RESEARCH.md)** and the arXiv-ready LaTeX preprint **[`paper/carry_optimal_goldbach.tex`](paper/carry_optimal_goldbach.tex)**:
 
 1. **Lemoine's Conjecture ($n = p + 2q$) to $10^{12}$:** verified all 500 billion odd numbers up to $10^{12}+1$ in **277.8 s** (100× past the standard $10^{10}$ literature milestone), maximal minimal $q = 3079$ at $n = 853{,}036{,}242{,}229$.
 2. **Twin-Prime Goldbach to $10^{10}$:** verified all 5 billion evens in **37.7 s** — exactly **34 exceptions** total, largest exception `4208`, maximal minimal twin-prime witness `299,359` at $n = 8{,}115{,}525{,}848$.
