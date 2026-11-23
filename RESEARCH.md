@@ -78,6 +78,38 @@ When $\Delta_c(n) = 0$, $n$ admits a **carry-optimal Goldbach partition** with z
      $$n = 805{,}306{,}372 = \texttt{0x30000004} = \texttt{110000000000000000000000000100}_2$$
    - **Mechanism:** Subtracting any small prime $p$ from a number containing a long zero-run immediately above its lowest `1`-bit forces a borrow cascade across the entire zero-run (`000...0` $\to$ `111...1`), creating $\Omega(\text{run length})$ carries on re-addition. Since a random zero-run of length $k$ occurs with probability $2^{-k}$, this explains both the $2^{-\Delta_c}$ exponential tail and why high-popcount integers (which lack long zero-runs) almost universally satisfy $\Delta_c(n) = 0$.
 
+### Exact Global Carry-Optimal Goldbach Theorem & Census ($N = 10^8$, [`carry_exact.cpp`](carry_exact.cpp))
+
+To separate small-witness artifacts from true global structure, we proved an **exact bit-level characterization** of global carry-optimality $\Delta_c^*(n) = \min_{p + q = n} \operatorname{carries}(p, q) - v_2(n) = 0$ over **all** odd primes $p \le n/2$:
+
+> **Theorem (Exact Submask Characterization):** Let $n \ge 6$ be even and $M = n - 2$. An odd pair $(p, q)$ with $p + q = n$ achieves $\operatorname{carries}(p, q) = v_2(n)$ **if and only if**
+> $$p = 1 \mathbin{|} s, \qquad q = 1 \mathbin{|} (M \oplus s)$$
+> for some binary submask $s \subseteq M$ ($0 < s < M$).
+
+**Immediate Corollaries (Infinite Exception Families):**
+- If $w = \operatorname{popcount}(n - 2) = 1$ (i.e. $n = 2^a + 2$, $a \ge 2$), there are $2^{w-1} - 1 = 0$ valid submask pairs with $p, q > 1$, so **$\Delta_c^*(2^a + 2) \ge 1$ unconditionally for all $a \ge 2$**.
+- If $w = 2$ and $n = 2^a + 2^b + 2$ ($a > b \ge 2$), the **only** valid pair is $(2^b + 1, 2^a + 1)$, so $\Delta_c^*(n) = 0$ iff both are **Fermat primes**.
+
+Using exact increasing submask enumeration (`s = (s - M_lo) & M_lo`) and full prime fallback in [`carry_exact.cpp`](carry_exact.cpp), we computed the **100% exact global $\Delta_c^*(n)$** for all **49,999,998 even integers** in $[6, 10^8]$ (163.4 s on 12 threads):
+
+- **98.9796%** of all even integers up to $10^8$ are globally carry-optimal ($\Delta_c^*(n) = 0$).
+- **Unique Global Maximum up to $10^8$:** $\Delta_c^*(n) = \mathbf{9}$ at **$n = 8{,}388{,}610 = 2^{23} + 2 = \texttt{0x800002}$** (only 1 number reaches 9; only 8 reach 8; 21 reach 7).
+- **Razor-Sharp Binary Weight Phase Transition ($w = \operatorname{popcount}(n - 2)$):**
+
+| $w = \operatorname{popcount}(n - 2)$ | Global Exceptions ($\Delta_c^* > 0$) | Total Evens | Failure Rate | Largest Exception $\le 10^8$ |
+|---:|---:|---:|---:|---:|
+| `1` | 25 | 25 | **100.00000%** | `67,108,866` ($2^{26}+2$) |
+| `2` | 314 | 324 | 96.91358% | `83,886,082` |
+| `3` | 2,308 | 2,576 | 89.59627% | `92,274,690` |
+| `7` | 159,155 | 615,295 | 25.86645% | `99,876,866` |
+| `8` | 136,953 | 1,427,660 | 9.59283% | `99,885,058` |
+| `9` | 51,412 | 2,778,277 | 1.85050% | `99,901,442` |
+| `10` | 4,385 | 4,575,328 | 0.09584% | `99,827,722` |
+| `11` | **22** | 6,415,036 | **0.00034%** | `96,112,802` |
+| **`12..25`** | **`0`** | **33,893,497** | **`0.00000%`** | *(none)* |
+
+> **Conjecture (Weighted Carry-Optimal Goldbach):** For all sufficiently large even integers $n$ with binary weight $w = \operatorname{popcount}(n - 2) > 2 \log_2 \ln n + C$ (and verified with **zero exceptions** for all $n \le 10^8$ having $w \ge 12$, across 33.89 million integers), there exists a carry-optimal Goldbach partition $n = p + q$ achieving $\operatorname{carries}(p, q) = v_2(n)$.
+
 ---
 
 ## 4. Information-Theoretic Structure of Minimal Goldbach Witnesses $p_{\min}(n)$
