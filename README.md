@@ -53,8 +53,10 @@ Usage:
 
 ```bash
 ./goldbach [N] [threads] [checkpoint_file]
+./goldbach --range LO HI [threads] [checkpoint_file]
 
 # Examples
 ./goldbach 1e10
 ./goldbach 1e12 12 goldbach_1e12.ckpt
+./goldbach --range 1000000000000000 1000001000000000 12   # 1B-wide shard at 10^15 in 1.14 s!
 ```

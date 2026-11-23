@@ -37,6 +37,7 @@ jobs:
           ./goldbach 1048578 2
           ./goldbach 1e8
           ./goldbach 1e9 4 test.ckpt
+          ./goldbach --range 100000000000000 100000010000000 4
           ./baseline 1e6
 
       - name: Verify edge cases and pi(N) self-check (Windows)
@@ -50,4 +51,5 @@ jobs:
           ./goldbach.exe 1048578 2
           ./goldbach.exe 1e8
           ./goldbach.exe 1e9 4 test.ckpt
+          ./goldbach.exe --range 100000000000000 100000010000000 4
           ./baseline.exe 1e6

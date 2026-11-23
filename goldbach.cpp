@@ -700,55 +700,84 @@ static void worker(void* arg) {
 }
 
 static u64 parseNum(const char* s) {
-    // Accept "1000000", "1e9", "4e10" etc.
+    // Exact 64-bit parsing for plain integers (up to 1.8e19); scientific notation via strtod.
+    bool sci = false;
+    for (const char* p = s; *p; ++p)
+        if (*p == 'e' || *p == 'E' || *p == '.') { sci = true; break; }
+    if (!sci) return (u64)std::strtoull(s, nullptr, 10);
     double d = std::strtod(s, nullptr);
     return (u64)std::llround(d);
 }
 
 int main(int argc, char** argv) {
     using Clock = std::chrono::steady_clock;
-    u64 N = argc > 1 ? parseNum(argv[1]) : 1000000000ULL;
-    unsigned T = argc > 2 ? (unsigned)std::atoi(argv[2]) : gb::hardwareThreads();
-    if (T == 0) T = 1;
-    if (N & 1) --N;
-    if (N < 4) { std::printf("Nothing to verify.\n"); return 0; }
-
-    auto t0 = Clock::now();
+    bool rangeMode = false;
+    u64 rangeLo = 4;
+    u64 N = 1000000000ULL;
+    unsigned T = gb::hardwareThreads();
     Shared sh;
-    sh.N = N;
-    if (argc > 3 && std::isdigit((unsigned char)argv[3][0]))
-        sh.densePrimes = std::min<size_t>(MAX_DENSE, (size_t)std::atoi(argv[3]));
-    else if (argc > 3)
-        sh.ckptFile = argv[3];
-    if (argc > 4)
-        sh.ckptFile = argv[4];
 
-    // --- Direct verification of small evens [4, min(N, DIRECT_LIMIT)) --------
-    const u64 directEnd = std::min(N + 2, DIRECT_LIMIT);  // exclusive
-    std::vector<uint8_t> isP;
-    std::vector<u32> directPrimes = simpleSieve(directEnd, &isP);
-    for (u64 n = 4; n < directEnd; n += 2) {
-        bool ok = false;
-        for (u32 p : directPrimes) {
-            if (p > n / 2) break;
-            if (isP[n - p]) {
-                ok = true;
-                if (p > sh.recordP) { sh.recordP = p; sh.recordN = n; }
-                break;
-            }
-        }
-        if (!ok) { std::printf("COUNTEREXAMPLE FOUND: %llu\n", (unsigned long long)n); return 1; }
+    if (argc > 3 && std::strcmp(argv[1], "--range") == 0) {
+        rangeMode = true;
+        rangeLo = parseNum(argv[2]);
+        N = parseNum(argv[3]);
+        if (argc > 4) T = (unsigned)std::atoi(argv[4]);
+        if (argc > 5 && std::isdigit((unsigned char)argv[5][0]))
+            sh.densePrimes = std::min<size_t>(MAX_DENSE, (size_t)std::atoi(argv[5]));
+        else if (argc > 5)
+            sh.ckptFile = argv[5];
+        if (argc > 6) sh.ckptFile = argv[6];
+    } else {
+        if (argc > 1) N = parseNum(argv[1]);
+        if (argc > 2) T = (unsigned)std::atoi(argv[2]);
+        if (argc > 3 && std::isdigit((unsigned char)argv[3][0]))
+            sh.densePrimes = std::min<size_t>(MAX_DENSE, (size_t)std::atoi(argv[3]));
+        else if (argc > 3)
+            sh.ckptFile = argv[3];
+        if (argc > 4)
+            sh.ckptFile = argv[4];
     }
 
-    // --- Segmented, multithreaded verification of [DIRECT_LIMIT, N] -----------
+    if (T == 0) T = 1;
+    if (rangeLo < 4) rangeLo = 4;
+    if (rangeLo & 1) ++rangeLo;
+    if (N & 1) --N;
+    if (N < rangeLo) { std::printf("Nothing to verify.\n"); return 0; }
+
+    auto t0 = Clock::now();
+    sh.N = N;
+
+    // --- Direct verification of small evens [rangeLo, min(N, DIRECT_LIMIT)) ---
+    std::vector<u32> directPrimes;
+    if (rangeLo < DIRECT_LIMIT) {
+        const u64 directEnd = std::min(N + 2, DIRECT_LIMIT);  // exclusive
+        std::vector<uint8_t> isP;
+        directPrimes = simpleSieve(directEnd, &isP);
+        for (u64 n = rangeLo; n < directEnd; n += 2) {
+            bool ok = false;
+            for (u32 p : directPrimes) {
+                if (p > n / 2) break;
+                if (isP[n - p]) {
+                    ok = true;
+                    if (p > sh.recordP) { sh.recordP = p; sh.recordN = n; }
+                    break;
+                }
+            }
+            if (!ok) { std::printf("COUNTEREXAMPLE FOUND: %llu\n", (unsigned long long)n); return 1; }
+        }
+    }
+
+    // --- Segmented, multithreaded verification of [segStart, N] ---------------
     if (N >= DIRECT_LIMIT) {
+        u64 segStart = (rangeLo > DIRECT_LIMIT) ? (rangeLo & ~15ULL) : DIRECT_LIMIT;
+        if (segStart < DIRECT_LIMIT) segStart = DIRECT_LIMIT;
         u64 sq = (u64)std::sqrt((double)N) + 2;
         while (sq * sq > N + 2) --sq;
         for (u32 p : simpleSieve(sq + 1)) if (p > 2) sh.basePrimes.push_back(p);
         for (u32 p : simpleSieve(PMAX)) if (p > 2) sh.smallPrimes.push_back(p);
         for (u32 p : sh.smallPrimes) sh.smallOff.push_back((u32)((PMAX - p - 1) / 2));
         buildPattern(sh);
-        sh.start = DIRECT_LIMIT;
+        sh.start = segStart;
         sh.numChunks = ((N + 2 - sh.start) / 2 + SEG_EVENS - 1) / SEG_EVENS;
         if (loadCheckpoint(sh)) {
             std::printf("Resumed from checkpoint '%s' at chunk %llu / %llu (%.1f%%)\n",
@@ -787,13 +816,15 @@ int main(int argc, char** argv) {
         std::printf("COUNTEREXAMPLE FOUND: %llu\n", (unsigned long long)sh.counterexample.load());
         return 1;
     }
-    // pi(N) cross-check: primes below DIRECT_LIMIT (incl. 2) + primes counted by workers.
+    // pi(N) cross-check (when starting from 4) or prime count in range.
     u64 piN = sh.primeCount.load();
     for (u32 p : directPrimes) if (p <= N) ++piN;
-    std::printf("Goldbach verified for all even n in [4, %llu]\n", (unsigned long long)N);
+    u64 evensTested = (N - rangeLo) / 2 + 1;
+    std::printf("Goldbach verified for all even n in [%llu, %llu]\n",
+                (unsigned long long)rangeLo, (unsigned long long)N);
     std::printf("  threads           : %u\n", T);
     std::printf("  time              : %.3f s\n", secs);
-    std::printf("  throughput        : %.1f M evens/s\n", (N / 2.0) / secs / 1e6);
+    std::printf("  throughput        : %.1f M evens/s\n", (double)evensTested / secs / 1e6);
     std::printf("  largest min p     : %llu  (n = %llu = %llu + %llu)\n",
                 (unsigned long long)sh.recordP, (unsigned long long)sh.recordN,
                 (unsigned long long)sh.recordP,
@@ -803,17 +834,21 @@ int main(int argc, char** argv) {
     if (s + c > 0)
         std::printf("  CPU split         : sieve %.2f s (%.0f%%), check %.2f s (%.0f%%)\n",
                     s, 100 * s / (s + c), c, 100 * c / (s + c));
-    std::printf("  pi(N)             : %llu", (unsigned long long)piN);
-    static const struct { u64 n, pi; } known[] = {
-        {1000000ULL, 78498ULL}, {10000000ULL, 664579ULL}, {100000000ULL, 5761455ULL},
-        {1000000000ULL, 50847534ULL}, {10000000000ULL, 455052511ULL},
-        {100000000000ULL, 4118054813ULL}, {1000000000000ULL, 37607912018ULL}};
-    for (auto& k : known)
-        if (k.n == N) {
-            std::printf("  [%s vs known %llu]", piN == k.pi ? "OK" : "MISMATCH!",
-                        (unsigned long long)k.pi);
-            if (piN != k.pi) { std::printf("\n"); return 2; }
-        }
-    std::printf("\n");
+    if (!rangeMode) {
+        std::printf("  pi(N)             : %llu", (unsigned long long)piN);
+        static const struct { u64 n, pi; } known[] = {
+            {1000000ULL, 78498ULL}, {10000000ULL, 664579ULL}, {100000000ULL, 5761455ULL},
+            {1000000000ULL, 50847534ULL}, {10000000000ULL, 455052511ULL},
+            {100000000000ULL, 4118054813ULL}, {1000000000000ULL, 37607912018ULL}};
+        for (auto& k : known)
+            if (k.n == N) {
+                std::printf("  [%s vs known %llu]", piN == k.pi ? "OK" : "MISMATCH!",
+                            (unsigned long long)k.pi);
+                if (piN != k.pi) { std::printf("\n"); return 2; }
+            }
+        std::printf("\n");
+    } else {
+        std::printf("  primes in range   : %llu\n", (unsigned long long)piN);
+    }
     return 0;
 }
