@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <string>
 #include <vector>
 
 typedef uint64_t u64;
@@ -83,8 +84,9 @@ static inline int clz32(u32 x) { return __builtin_clz(x); }
 
 struct Shared {
     u32 N;
+    bool zeroOnly = false;
     std::vector<u64> oddPrime;   // bit (x >> 1) is 1 iff odd x is prime (x >= 3; bit 0 = 1 is 0)
-    std::vector<u32> primes;     // all odd primes <= N/2
+    std::vector<u32> primes;     // all odd primes <= N/2 (only populated when !zeroOnly)
     std::vector<uint8_t> pPop;   // popcount(p) for primes[]
     std::atomic<u32> nextLo{6};
 
@@ -96,7 +98,7 @@ struct Shared {
     u32 maxFailW = 0, maxFailWN = 0;
     u32 maxExcess = 0, maxExcessN = 0;
     u32 lastFailW[32] = {0};     // largest n <= N with Delta_c*(n) > 0 for each w
-    std::vector<u32> highWEx;    // exceptions with w >= 7
+    std::vector<u32> highWEx;    // exceptions with w >= 11
     std::vector<u32> exGe2;      // numbers with Delta_c*(n) >= 2
 };
 
@@ -165,14 +167,14 @@ static void worker(void* arg) {
             if (hasZeroExcess(B, n)) {
                 ++lHist[0];
             } else {
-                int ex = exactGlobalExcess(sh, n);
+                int ex = sh->zeroOnly ? 1 : exactGlobalExcess(sh, n);
                 if (ex < 32) ++lHist[ex];
                 ++lFailW[w];
                 if (n > lLastFailW[w]) lLastFailW[w] = n;
                 if ((u32)w > lMaxFailW) { lMaxFailW = (u32)w; lMaxFailWN = n; }
                 if ((u32)ex > lMaxEx) { lMaxEx = (u32)ex; lMaxExN = n; }
-                if (w >= 7 && lHighW.size() < 50) lHighW.push_back(n);
-                if (ex >= 2 && lExGe2.size() < 50) lExGe2.push_back(n);
+                if (w >= 11 && lHighW.size() < 200) lHighW.push_back(n);
+                if (!sh->zeroOnly && ex >= 2 && lExGe2.size() < 50) lExGe2.push_back(n);
             }
         }
     }
@@ -205,6 +207,7 @@ int main(int argc, char** argv) {
     auto t0 = Clock::now();
     Shared sh;
     sh.N = N;
+    sh.zeroOnly = (argc > 3 && std::string(argv[3]) == "zero");
 
     // Sieve odd primes up to N
     const u32 nOdds = N / 2 + 1;
@@ -220,10 +223,12 @@ int main(int argc, char** argv) {
             }
         }
     }
-    for (u32 p = 3; p <= N / 2; p += 2) {
-        if (isOddPrime(B, p)) {
-            sh.primes.push_back(p);
-            sh.pPop.push_back((uint8_t)pop32(p));
+    if (!sh.zeroOnly) {
+        for (u32 p = 3; p <= N / 2; p += 2) {
+            if (isOddPrime(B, p)) {
+                sh.primes.push_back(p);
+                sh.pPop.push_back((uint8_t)pop32(p));
+            }
         }
     }
 
@@ -252,7 +257,7 @@ int main(int argc, char** argv) {
     std::printf("  max w = pop(n-2) with Delta_c* > 0 : w = %u  (at n = %u = 0x%X)\n",
                 sh.maxFailW, sh.maxFailWN, sh.maxFailWN);
     std::printf("  Exact exceptions by binary weight w = popcount(n - 2):\n");
-    for (int w = 1; w < 28; ++w) {
+    for (int w = 1; w < 31; ++w) {
         if (sh.totalByW[w] > 0)
             std::printf("    w=%2d : %9llu / %11llu  (%9.5f%% fail)  last_n=%u\n",
                         w, (unsigned long long)sh.failByW[w],
@@ -260,9 +265,16 @@ int main(int argc, char** argv) {
                         100.0 * sh.failByW[w] / sh.totalByW[w],
                         sh.lastFailW[w]);
     }
-    std::sort(sh.exGe2.begin(), sh.exGe2.end());
-    std::printf("  Numbers with Delta_c*(n) >= 2 (showing up to 20): ");
-    for (size_t i = 0; i < sh.exGe2.size() && i < 20; ++i) std::printf("%u ", sh.exGe2[i]);
+    std::sort(sh.highWEx.begin(), sh.highWEx.end());
+    std::printf("  Exceptions with w >= 11 (count=%zu, showing up to 30): ", sh.highWEx.size());
+    for (size_t i = 0; i < sh.highWEx.size() && i < 30; ++i)
+        std::printf("%u(w=%d) ", sh.highWEx[i], pop32(sh.highWEx[i] - 2));
     std::printf("\n");
+    if (!sh.zeroOnly) {
+        std::sort(sh.exGe2.begin(), sh.exGe2.end());
+        std::printf("  Numbers with Delta_c*(n) >= 2 (showing up to 20): ");
+        for (size_t i = 0; i < sh.exGe2.size() && i < 20; ++i) std::printf("%u ", sh.exGe2[i]);
+        std::printf("\n");
+    }
     return 0;
 }
