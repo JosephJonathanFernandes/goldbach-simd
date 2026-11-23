@@ -24,6 +24,8 @@ High-throughput C++ Goldbach conjecture verifier using a cache-blocked segmented
 | $10^{11}$ | *(12.5 GB RAM)* | **13.827 s** | **3.62 B evens/s** | `2803` ($35{,}884{,}080{,}836$) | `4,118,054,813` |
 | $10^{12}$ | *(125 GB RAM)* | **200.813 s** | **2.49 B evens/s** | `3457` ($599{,}533{,}546{,}358$) | `37,607,912,018` |
 
+![Benchmark Scaling](figures/benchmark_scaling.png)
+
 ## Research Frontiers (`research_suite.cpp`)
 
 Beyond standard Goldbach verification, [`research_suite.cpp`](research_suite.cpp) applies the same AVX2 sieve engine to four computational number theory & CS frontiers — full results in **[`RESEARCH.md`](RESEARCH.md)**:

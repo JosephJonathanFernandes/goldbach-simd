@@ -78,6 +78,8 @@ When $\Delta_c(n) = 0$, $n$ admits a **carry-optimal Goldbach partition** with z
      $$n = 805{,}306{,}372 = \texttt{0x30000004} = \texttt{110000000000000000000000000100}_2$$
    - **Mechanism:** Subtracting any small prime $p$ from a number containing a long zero-run immediately above its lowest `1`-bit forces a borrow cascade across the entire zero-run (`000...0` $\to$ `111...1`), creating $\Omega(\text{run length})$ carries on re-addition. Since a random zero-run of length $k$ occurs with probability $2^{-k}$, this explains both the $2^{-\Delta_c}$ exponential tail and why high-popcount integers (which lack long zero-runs) almost universally satisfy $\Delta_c(n) = 0$.
 
+![Goldbach Carry Excess Tail Decay](figures/carry_tail_decay.png)
+
 ### Exact Global Carry-Optimal Goldbach Theorem & Census ($N = 10^8$, [`carry_exact.cpp`](carry_exact.cpp))
 
 To separate small-witness artifacts from true global structure, we proved an **exact bit-level characterization** of global carry-optimality $\Delta_c^*(n) = \min_{p + q = n} \operatorname{carries}(p, q) - v_2(n) = 0$ over **all** odd primes $p \le n/2$:
@@ -123,6 +125,8 @@ Using fast `--zero-only` submask enumeration, we verified all **499,999,998 even
 | $10^8$ (50M evens) | 98.9796% | 22 / 6.42M | 0 / 7.69M | **0** / 26.21M |
 | **$10^9$ (500M evens)** | **99.5972%** | 2,063 / 34.11M | **1** / 50.78M (`743,309,774`) | **0** / 378.76M |
 
+![Exact Global Carry-Optimal Phase Transition](figures/carry_phase_transition.png)
+
 ---
 
 ## 4. Information-Theoretic Structure of Minimal Goldbach Witnesses $p_{\min}(n)$
@@ -137,6 +141,8 @@ Treating the minimal Goldbach witness stream $\{p_{\min}(2k)\}$ as a discrete st
 | $H(p_{\min} \mid n \equiv 4 \pmod 6)$ | `3.983388 bits` | **`4.161524 bits`** |
 | Lag-1 Mutual Information $I(p_{\min}(n); p_{\min}(n+2))$ | `1.598308 bits` | **`1.587231 bits`** |
 | Longest Constant Run ($n > 10$) | `2` (`p_min = 3`) | **`2`** (`p_min = 3`) |
+
+![Minimal Goldbach Witness Distribution and Mod-6 Inversion](figures/witness_entropy_inversion.png)
 
 ### Key Structural Findings
 
