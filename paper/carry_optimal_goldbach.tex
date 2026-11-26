@@ -68,6 +68,28 @@ Let $w = \operatorname{pop}(n - 2)$. There are exactly $2^{w-1} - 1$ unordered o
 \end{enumerate}
 \end{corollary}
 
+\begin{theorem}[Unconditional Infinite Exceptions for Every Weight $w \ge 1$ and $\Omega(\ln \ln N)$ Lower Bound]
+\label{thm:allw}
+For every integer $w \ge 1$, there exist infinitely many even integers $n$ with $\operatorname{pop}(n - 2) = w$ and $\Delta_c^*(n) \ge 1$ (in fact, having \emph{both} $p = 1 \mathbin{|} s$ and $q = 1 \mathbin{|} ((n-2) \oplus s)$ strictly composite for every proper non-empty submask $s \subset n - 2$). Explicitly, let
+\begin{equation}
+L_w = \operatorname{lcm}\bigl\{\operatorname{ord}_\ell(2) : \ell \text{ prime},\; 3 \le \ell \le 2w - 1\bigr\}
+\end{equation}
+(with $L_1 = 1$). Then for any strictly increasing integers $k_1 < k_2 < \dots < k_w$ satisfying $2^{k_1 L_w + 1} > 2w - 1$, the integer $n = 2 + \sum_{i=1}^w 2^{k_i L_w + 1}$ satisfies $\operatorname{pop}(n - 2) = w$ and $\Delta_c^*(n) \ge 1$. Moreover, defining $W_{\max}(N) = \max\{\operatorname{pop}(n - 2) : 6 \le n \le N \text{ even},\; \Delta_c^*(n) > 0\}$, we have unconditionally for all sufficiently large $N$:
+\begin{equation}
+W_{\max}(N) \ge \Bigl(\frac{1}{2} - o(1)\Bigr) \ln \ln N.
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+For $w = 1$ the claim follows from Corollary~2. Let $w \ge 2$ and let $s \subset M = n - 2$ be any non-empty proper submask of Hamming weight $r = \operatorname{pop}(s) \in \{1, \dots, w - 1\}$. Then $2r + 1$ is an odd integer satisfying $3 \le 2r + 1 \le 2w - 1$, so it possesses at least one odd prime factor $\ell \le 2w - 1$. Because $\operatorname{ord}_\ell(2) \mid L_w$, every bit of $M$ satisfies $2^{k_i L_w + 1} \equiv 2 \pmod \ell$, whence
+\[
+p = 1 + s \equiv 1 + 2r \equiv 0 \pmod \ell.
+\]
+Since $p > 2^{k_1 L_w + 1} > 2w - 1 \ge \ell$, $p$ is strictly composite (and symmetrically $q = 1 + (M - s)$ is strictly composite via $2(w - r) + 1$). Thus $\Delta_c^*(n) \ge 1$.
+
+For the asymptotic bound, every prime-power divisor $q^a \parallel L_w$ divides $\operatorname{ord}_\ell(2) \le \ell - 1 \le 2w - 2$ for some prime $\ell \le 2w - 1$, so $L_w \mid \operatorname{lcm}(1, 2, \dots, 2w - 2) = e^{\psi(2w - 2)}$, where $\psi(x) = (1 + o(1))x$ is Chebyshev's second function. Hence $\ln L_w \le (2 + o(1))w$. Choosing $k_i = i$ gives $n_w = 2 + \sum_{i=1}^w 2^{i L_w + 1} < 2^{w L_w + 2}$. For any large $N$, letting $w$ be maximal with $n_w \le N$, we have $N < n_{w+1} < 2^{(w+1)L_{w+1} + 2}$, so $\ln \ln N \le \ln L_{w+1} + O(\ln w) \le (2 + o(1))w$, yielding $W_{\max}(N) \ge w \ge (\frac{1}{2} - o(1))\ln \ln N$.
+\end{proof}
+
 \subsection{Exact Global Census to $N = 10^9$}
 Using increasing submask enumeration (\texttt{s = (s - M\_lo) \& M\_lo}) in \texttt{carry\_exact.cpp}, we tested $\Delta_c^*(n) = 0$ over all $499{,}999{,}998$ even integers in $[6, 10^9]$ ($18.67\,\text{s}$ on 12 threads) and computed full global $\Delta_c^*(n)$ up to $10^8$ ($163.4\,\text{s}$).
 
@@ -94,8 +116,12 @@ Up to $10^8$, the unique global maximum is $\Delta_c^*(n) = 9$ at $n = 8{,}388{,
 
 By the Prime Number Theorem, the expected number of carry-optimal prime pairs for weight $w$ scales as $\Theta(2^{w-1} / \ln^2 n)$, giving a critical threshold $w_{\text{crit}}(n) \approx 2 \log_2 \ln n$. Because a typical integer $\le N$ has $w \approx \frac{1}{2}\log_2 N \gg 2\log_2 \ln N$, we propose:
 
-\begin{conjecture}[Weighted Carry-Optimal Goldbach]
-There exists a constant $C > 0$ such that every sufficiently large even integer $n$ with $\operatorname{pop}(n - 2) > 2 \log_2 \ln n + C$ satisfies $\Delta_c^*(n) = 0$. Consequently, carry-optimal Goldbach numbers have asymptotic density $1$ among the even integers.
+\begin{conjecture}[Sharp $\Theta(\ln \ln N)$ Threshold for Carry-Optimal Goldbach]
+Combined with Theorem~\ref{thm:allw}, the extremal exception weight $W_{\max}(N)$ has exact order $\Theta(\ln \ln N)$; specifically, there exists a constant $C > 0$ such that every even integer $n$ with $\operatorname{pop}(n - 2) > \frac{2}{\ln 2} \ln \ln n + C$ satisfies $\Delta_c^*(n) = 0$, bracketing $W_{\max}(N)$ tightly inside
+\[
+\Bigl(\frac{1}{2} - o(1)\Bigr)\ln \ln N \;\le\; W_{\max}(N) \;\stackrel{\text{conj.}}{\le}\; \Bigl(\frac{2}{\ln 2} + o(1)\Bigr)\ln \ln N.
+\]
+Consequently, carry-optimal Goldbach numbers have asymptotic density $1$ among the even integers.
 \end{conjecture}
 
 \section{AVX2 Sieve Architecture and Frontier Verifications}

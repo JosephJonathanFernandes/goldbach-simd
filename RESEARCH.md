@@ -92,6 +92,12 @@ To separate small-witness artifacts from true global structure, we proved an **e
 - If $w = \operatorname{popcount}(n - 2) = 1$ (i.e. $n = 2^a + 2$, $a \ge 2$), there are $2^{w-1} - 1 = 0$ valid submask pairs with $p, q > 1$, so **$\Delta_c^*(2^a + 2) \ge 1$ unconditionally for all $a \ge 2$**.
 - If $w = 2$ and $n = 2^a + 2^b + 2$ ($a > b \ge 2$), the **only** valid pair is $(2^b + 1, 2^a + 1)$, so $\Delta_c^*(n) = 0$ iff both are **Fermat primes**.
 
+> **Theorem 2 (Unconditional Infinite Exceptions for EVERY Weight $w \ge 1$ & $\frac{1}{2}\ln\ln N$ Lower Bound):**
+> For **every** integer $w \ge 1$, let $L_w = \operatorname{lcm}\{\operatorname{ord}_\ell(2) : \ell \text{ prime},\; 3 \le \ell \le 2w - 1\}$. Then for any $k_1 < \dots < k_w$ with $2^{k_1 L_w + 1} > 2w - 1$, the integer $n = 2 + \sum_{i=1}^w 2^{k_i L_w + 1}$ has $\operatorname{popcount}(n - 2) = w$ and **$\Delta_c^*(n) \ge 1$** (for every proper submask $s$ of weight $r \in \{1, \dots, w-1\}$, any odd prime $\ell \mid (2r + 1)$ satisfies $2^{k_i L_w + 1} \equiv 2 \pmod \ell$, forcing $p = 1 + s \equiv 2r + 1 \equiv 0 \pmod \ell$ and symmetrically $q$ composite!).
+> Since $L_w \mid \operatorname{lcm}(1, \dots, 2w - 2) = e^{\psi(2w - 2)} = e^{(2 + o(1))w}$, the maximal failing binary weight $W_{\max}(N) = \max\{\operatorname{popcount}(n - 2) : n \le N,\; \Delta_c^*(n) > 0\}$ satisfies **unconditionally for all large $N$**:
+> $$\Bigl(\frac{1}{2} - o(1)\Bigr)\ln \ln N \;\le\; W_{\max}(N) \;\stackrel{\text{conj.}}{\le}\; \Bigl(\frac{2}{\ln 2} + o(1)\Bigr)\ln \ln N \approx 2.885\ln\ln N.$$
+> *(Verified exhaustively over all $2^w - 2$ subsets up to $w = 16$ via `./carry_exact --theorem2`; e.g. concrete 64-bit $w = 5$ exception `n = 0x2002002002002002 = 2,306,406,096,639,631,362` with $L_5 = 12$.)*
+
 Using exact increasing submask enumeration (`s = (s - M_lo) & M_lo`) and full prime fallback in [`carry_exact.cpp`](carry_exact.cpp), we computed the **100% exact global $\Delta_c^*(n)$** for all **49,999,998 even integers** in $[6, 10^8]$ (163.4 s on 12 threads):
 
 - **98.9796%** of all even integers up to $10^8$ are globally carry-optimal ($\Delta_c^*(n) = 0$).

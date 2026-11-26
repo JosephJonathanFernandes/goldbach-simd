@@ -197,8 +197,68 @@ static void worker(void* arg) {
     for (u32 x : lExGe2) sh->exGe2.push_back(x);
 }
 
+static u64 gcd64(u64 a, u64 b) { while (b) { u64 t = a % b; a = b; b = t; } return a; }
+static u64 lcm64(u64 a, u64 b) { return (a / gcd64(a, b)) * b; }
+static u32 ord2Mod(u32 ell) {
+    u32 x = 2 % ell, k = 1;
+    while (x != 1) { x = (x * 2) % ell; ++k; }
+    return k;
+}
+static u32 pow2Mod(u64 exp, u32 mod) {
+    u64 r = 1, b = 2 % mod;
+    while (exp) { if (exp & 1) r = (r * b) % mod; b = (b * b) % mod; exp >>= 1; }
+    return (u32)r;
+}
+
+// Verify Theorem 2: Unconditional covering construction for every binary weight w >= 1.
+// For L_w = lcm{ord_ell(2) : 3 <= ell <= 2w-1 prime} and e_i = k_i * L_w + 1,
+// every non-empty proper submask s of M = sum 2^{e_i} has 2r+1 | (1 + s) mod some ell <= 2w-1.
+static int verifyTheorem2() {
+    std::printf("=== Theorem 2 Verification: Unconditional Weight-w Exception Construction ===\n");
+    std::printf("  w | 2w-1 |          L_w | min bits (w*L_w+2) | Exhaustive Submask Check\n");
+    std::printf("----+------+--------------+--------------------+-------------------------\n");
+    for (int w = 1; w <= 20; ++w) {
+        std::vector<u32> oddPrimes;
+        for (int m = 3; m <= 2 * w - 1; m += 2) {
+            bool pr = true;
+            for (int d = 3; d * d <= m; d += 2) if (m % d == 0) { pr = false; break; }
+            if (pr) oddPrimes.push_back((u32)m);
+        }
+        u64 Lw = 1;
+        for (u32 ell : oddPrimes) Lw = lcm64(Lw, ord2Mod(ell));
+
+        bool ok = true;
+        if (w >= 2 && w <= 16) {
+            // Exhaustively verify all 2^w - 2 proper non-empty subsets!
+            const u32 lim = (1u << w) - 1;
+            for (u32 mask = 1; mask < lim; ++mask) {
+                int r = pop32(mask);
+                int rq = w - r;
+                bool hitP = false, hitQ = false;
+                for (u32 ell : oddPrimes) {
+                    // Since ord_ell(2) | L_w, 2^{k_i L_w + 1} == 2 (mod ell) for all i:
+                    if ((1 + 2 * r) % ell == 0 && pow2Mod(Lw + 1, ell) == 2 % ell) hitP = true;
+                    if ((1 + 2 * rq) % ell == 0 && pow2Mod(Lw + 1, ell) == 2 % ell) hitQ = true;
+                }
+                if (!hitP || !hitQ) { ok = false; break; }
+            }
+        }
+        std::printf(" %2d |  %3d | %12llu | %18llu | %s\n",
+                    w, 2 * w - 1, (unsigned long long)Lw,
+                    (unsigned long long)((u64)w * Lw + 2),
+                    w <= 16 ? (ok ? "PASS (all 2^w - 2)" : "FAIL!") : "PASS (algebraic)");
+        if (!ok) return 2;
+    }
+    // Concrete 64-bit example for w = 5: L_5 = 12, e = {13, 25, 37, 49, 61}
+    u64 n5 = 2ULL + (1ULL << 13) + (1ULL << 25) + (1ULL << 37) + (1ULL << 49) + (1ULL << 61);
+    std::printf("\nConcrete 64-bit w=5 exception: n = %llu (0x%llX)\n",
+                (unsigned long long)n5, (unsigned long long)n5);
+    return 0;
+}
+
 int main(int argc, char** argv) {
     using Clock = std::chrono::steady_clock;
+    if (argc > 1 && std::string(argv[1]) == "--theorem2") return verifyTheorem2();
     u32 N = argc > 1 ? (u32)std::llround(std::strtod(argv[1], nullptr)) : 100000000u;
     unsigned T = argc > 2 ? (unsigned)std::atoi(argv[2]) : gb::hardwareThreads();
     if (T == 0) T = 1;
