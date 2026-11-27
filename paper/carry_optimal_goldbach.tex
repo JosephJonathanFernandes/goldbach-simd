@@ -106,7 +106,13 @@ $10^9$ ($500\text{M}$ evens) & $\mathbf{99.5972\%}$ & $2{,}063 / 34.11\text{M}$ 
 \end{tabular}
 \end{table}
 
-Up to $10^8$, the unique global maximum is $\Delta_c^*(n) = 9$ at $n = 8{,}388{,}610 = 2^{23} + 2$. Up to $10^9$, out of $50{,}777{,}720$ even integers with $w = 12$, there is a \emph{unique} exception: $n = 743{,}309{,}774 = \texttt{0x2C4E01CE}$, none of whose $2{,}047$ submask pairs consist of two primes. Across all $378{,}763{,}407$ even integers with $w \ge 13$, zero exceptions occur.
+Up to $10^8$, the unique global maximum is $\Delta_c^*(n) = 9$ at $n = 8{,}388{,}610 = 2^{23} + 2$. Up to $10^9$, out of $50{,}777{,}720$ even integers with $w = 12$, there is a \emph{unique} exception: $n = 743{,}309{,}774 = \texttt{0x2C4E01CE}$, none of whose $2{,}047$ submask pairs consist of two primes. Across all $378{,}763{,}407$ even integers with $w \ge 13$ below $10^9$, zero exceptions occur.
+
+To locate the first $w = 13$ exception beyond $2^{32}$, we implemented parallel colexicographic combination unranking with Gosper's hack (\texttt{gosper\_hunt.cpp}), visiting only weight-$w$ integers in exact bit-shell order. This yields the first $13$ terms of the minimal Carry-Optimal Goldbach exception sequence $a(w) = \min\{n \ge 6 \text{ even} : \operatorname{pop}(n - 2) = w,\; \Delta_c^*(n) > 0\}$:
+\[
+6,\; 12,\; 52,\; 62,\; 188,\; 1448,\; 5342,\; 14992,\; 105274,\; 689072,\; 21852554,\; 743309774,\; \mathbf{4706638234}.
+\]
+Notably, $a(13) = 4{,}706{,}638{,}234 = \texttt{0x11889999A}$ ($a(13) - 2 = \texttt{0x118899998}$) exhibits spontaneous $\bmod\text{-}4$ exponent alignment mirroring Theorem~\ref{thm:allw}: all $13$ set bits of $a(13) - 2$ lie at positions $\equiv 0$ or $3 \pmod 4$ ($2^e \equiv 1$ or $8 \pmod{15}$), heavily concentrating $1 + s \pmod{15}$ onto multiples of $3$ and $5$ across all $4{,}095$ candidate submask pairs.
 
 \begin{figure}[h]
 \centering

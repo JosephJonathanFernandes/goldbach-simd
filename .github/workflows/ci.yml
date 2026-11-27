@@ -20,6 +20,7 @@ jobs:
         run: |
           g++ -O3 -march=native -std=c++17 -Wall -Wno-format -pthread goldbach.cpp -o goldbach
           g++ -O3 -march=native -std=c++17 -Wall -Wno-format -pthread carry_exact.cpp -o carry_exact
+          g++ -O3 -march=native -std=c++17 -Wall -Wno-format -pthread gosper_hunt.cpp -o gosper_hunt
           g++ -O3 -march=native -std=c++17 baseline.cpp -o baseline
 
       - name: Build (Windows)
@@ -27,6 +28,7 @@ jobs:
         run: |
           g++ -O3 -march=native -std=c++17 -Wall -Wno-format -pthread goldbach.cpp -o goldbach.exe
           g++ -O3 -march=native -std=c++17 -Wall -Wno-format -pthread carry_exact.cpp -o carry_exact.exe
+          g++ -O3 -march=native -std=c++17 -Wall -Wno-format -pthread gosper_hunt.cpp -o gosper_hunt.exe
           g++ -O3 -march=native -std=c++17 baseline.cpp -o baseline.exe
 
       - name: Verify edge cases and pi(N) self-check (Linux)
@@ -41,6 +43,8 @@ jobs:
           ./goldbach 1e9 4 test.ckpt
           ./goldbach --range 100000000000000 100000010000000 4
           ./carry_exact --theorem2
+          ./gosper_hunt 11 26 4
+          python3 scripts/verify_nmin.py
           ./baseline 1e6
 
       - name: Verify edge cases and pi(N) self-check (Windows)
@@ -56,4 +60,6 @@ jobs:
           ./goldbach.exe 1e9 4 test.ckpt
           ./goldbach.exe --range 100000000000000 100000010000000 4
           ./carry_exact.exe --theorem2
+          ./gosper_hunt.exe 11 26 4
+          python scripts/verify_nmin.py
           ./baseline.exe 1e6

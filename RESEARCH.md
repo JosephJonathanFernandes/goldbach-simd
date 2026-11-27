@@ -133,6 +133,28 @@ Using fast `--zero-only` submask enumeration, we verified all **499,999,998 even
 
 ![Exact Global Carry-Optimal Phase Transition](figures/carry_phase_transition.png)
 
+#### New Integer Sequence $a(w) = n_{\min}(w)$ ($w = 1 \dots 13$) & Beyond-$2^{32}$ Gosper Hunt ([`gosper_hunt.cpp`](gosper_hunt.cpp))
+
+Define **$a(w) = n_{\min}(w)$** as the smallest even integer $n \ge 6$ with binary weight $\operatorname{popcount}(n - 2) = w$ that admits **no** carry-optimal Goldbach partition ($\Delta_c^*(n) > 0$). Using parallel colexicographic unranking + Gosper's hack (`gosper_hunt.cpp`) and independent verification (`scripts/verify_nmin.py`), we computed the exact first **13 terms** — pushing past $2^{32}$ to find **$n_{\min}(13)$**:
+
+`6, 12, 52, 62, 188, 1448, 5342, 14992, 105274, 689072, 21852554, 743309774, 4706638234`
+
+| $w$ | $n_{\min}(w)$ | Hex (`n_min(w)`) | Bits | Bit-Positions of $n_{\min}(w) - 2$ / Structural Note |
+|---:|---:|---|---:|---|
+| `1` | `6` | `0x6` | 3 | $2^2 + 2$ (0 submask pairs) |
+| `2` | `12` | `0xC` | 4 | $2^3 + 2^1 + 2$; unique pair $(3, 9)$ |
+| `3` | `52` | `0x34` | 6 | `0x32` |
+| `4` | `62` | `0x3E` | 6 | `0x3C` |
+| `5` | `188` | `0xBC` | 8 | `0xBA` |
+| `6` | `1,448` | `0x5A8` | 11 | `0x5A6` |
+| `7` | `5,342` | `0x14DE` | 13 | `0x14DC` |
+| `8` | `14,992` | `0x3A90` | 14 | `0x3A8E` |
+| `9` | `105,274` | `0x19B3A` | 17 | `0x19B38` |
+| `10` | `689,072` | `0xA83B0` | 20 | `0xA83AE` |
+| `11` | `21,852,554` | `0x14D718A` | 25 | `0x14D7188` |
+| `12` | `743,309,774` | `0x2C4E01CE` | 30 | Unique $w=12$ exception $\le 10^9$ (2,047 pairs all fail) |
+| **`13`** | **`4,706,638,234`** | **`0x11889999A`** | **33** | **`n - 2 = 0x118899998`: all 13 bits lie at exponents $\equiv 0$ or $3 \pmod 4$ ($2^e \equiv 1, 8 \pmod{15}$), killing most of its 4,095 pairs mod 3 and 5!** |
+
 ---
 
 ## 4. Information-Theoretic Structure of Minimal Goldbach Witnesses $p_{\min}(n)$
